@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<item value="RemoteVpn" key="test_eth_bram_cdma-target"/>
+	<item value="_ide/bitstream/eth1_wrapper.mmi" key="test_eth_bram_cdma-bmmFile"/>
+	<item value="test_eth_bram_cdma" key="programfpga.sdxproject"/>
+	<item value="Digilent JTAG-SMT1 210203367268A/1-xc7k325t" key="test_eth_bram_cdma-device"/>
+	<item value="false" key="test_eth_bram_cdma-skip_rev_check"/>
+	<item value="false" key="test_eth_bram_cdma-partial_bit"/>
+	<item value="bootloop" key="test_eth_bram_cdma-microblaze_0-initElf"/>
+	<item value="_ide/bitstream/eth1_wrapper.bit" key="test_eth_bram_cdma-bitFile"/>
+</section>
