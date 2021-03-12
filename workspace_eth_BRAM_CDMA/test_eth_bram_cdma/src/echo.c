@@ -44,7 +44,7 @@
 #define MEN_BASE_DDR3	XPAR_MIG_7SERIES_0_BASEADDR
 #define BUS_DATA_TX		(MEN_BASE_DDR3 + 0x20000000)
 #define BUS_DATA_RX		XPAR_AXI_BRAM_CTRL_0_S_AXI_BASEADDR
-#define BUS_LENGTH		64U
+#define BUS_LENGTH		4096U
 
 extern XAxiCdma AxiCdmaInstance;
 unsigned int length = BUS_LENGTH;			/*longitud de los buffer*/
@@ -137,11 +137,11 @@ err_t recv_callback(void *arg, struct tcp_pcb *tpcb,
 	/* echo back the payload */
 	/* in this case, we assume that the payload is < TCP_SND_BUF */
 	if (tcp_sndbuf(tpcb) > p->len) {
-		xil_printf("\nRecivido %d bytes\n\r",p->len-2);
+		xil_printf("\nRecivido %d bytes\n\r",p->len);
 		/*se van copiando los datos en la parte designada de la DDR3,
 		 * se hace que sea len-2 para evitar guardar \r y \n por cada payload
 		 * que llega*/
-		for (int i=0;i<(p->len-2);i++){
+		for (int i=0;i<(p->len);i++){
 			char data=(char) *((char*)payload);
 			xil_printf("%c",data);
 			/*tratar de armar un swich case para reconcer por caracteres
@@ -174,7 +174,7 @@ err_t recv_callback(void *arg, struct tcp_pcb *tpcb,
 			}
 		}
 //		err = tcp_write(tpcb, p->payload, p->len, 1);
-		tcp_write(tpcb, (void*)"llego un dato\n" , sizeof("llego un dato\n"), 1);
+//		tcp_write(tpcb, (void*)"llego un dato\n" , sizeof("llego un dato\n"), 1);
 	} else
 		xil_printf("no space in tcp_sndbuf\n\r");
 

@@ -1,2 +1,2 @@
    text	   data	    bss	    dec	    hex	filename
- 134478	   2216	3961130	4097824	 3e8720	test_eth_bram_cdma.elf
+ 134426	   2216	3961134	4097776	 3e86f0	test_eth_bram_cdma.elf
