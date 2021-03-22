@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<item value="RemoteVpn" key="eth_dma_axis-target"/>
+	<item value="false" key="eth_dma_axis-partial_bit"/>
+	<item value="bootloop" key="eth_dma_axis-microblaze_0-initElf"/>
+	<item value="Digilent JTAG-SMT1 210203367268A/1-xc7k325t" key="eth_dma_axis-device"/>
+	<item value="false" key="eth_dma_axis-skip_rev_check"/>
+	<item value="eth_dma_axis" key="programfpga.sdxproject"/>
+	<item value="_ide/bitstream/eth1_wrapper2.mmi" key="eth_dma_axis-bmmFile"/>
+	<item value="_ide/bitstream/eth1_wrapper2.bit" key="eth_dma_axis-bitFile"/>
+</section>
