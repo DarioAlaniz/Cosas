@@ -35,7 +35,7 @@ all: echo_server.elf secondary-outputs
 echo_server.elf: $(OBJS) ../src/lscript.ld $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: MicroBlaze gcc linker'
-	mb-gcc -Wl,-T -Wl,../src/lscript.ld -LD:/dario/fulgor/trabajo_final/workspace_ethernet/workspace_eth_dma_axis/eth1_wrapper2/export/eth1_wrapper2/sw/eth1_wrapper2/standalone_domain/bsplib/lib -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -Wl,--gc-sections -o "echo_server.elf" $(OBJS) $(USER_OBJS) $(LIBS)
+	mb-gcc -Wl,-T -Wl,../src/lscript.ld -L/home/becario/ethernet/dario/Cosas/workspace_eth_dma_axis/eth1_wrapper2/export/eth1_wrapper2/sw/eth1_wrapper2/standalone_domain/bsplib/lib -mlittle-endian -mcpu=v11.0 -mxl-soft-mul -Wl,--no-relax -Wl,--gc-sections -o "echo_server.elf" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 

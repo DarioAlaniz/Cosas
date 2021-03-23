@@ -87,7 +87,7 @@ volatile boolean flag_head;
 volatile u16_t size_payload;
 u16_t size_pack_recv;
 u32_t* BusDataTx =(u32_t*) BUS_DATA_TX;
-static u8* DataTx = (u8*)BUS_DATA_TX;
+static u8_t* DataTx = (u8_t*)BUS_DATA_TX;
 u16_t payload_len_add;
 
 #if LWIP_IPV6==1
@@ -264,8 +264,10 @@ int main()
 		if (flag_recv){
 			flag_recv = FALSE;
 			unsigned char data;
+			//unsigned char *pData;
 			if (!flag_head){
-				payload++;
+				//payload++;
+				//pData++;
 				data = (unsigned char) *payload;
 				if (data==0xAA){ //head
 					flag_head = TRUE;
@@ -283,16 +285,19 @@ int main()
 					size_pack_recv |=  (data<<8);
 					payload++;
 					payload_len_add = payload_len-4;
-					MEMCPY(&DataTx,&payload,payload_len_add);
+					MEMCPY(DataTx,payload,payload_len_add);
 
 				}
 			}
+
 			else {
 				//DataTx = DataTx + payload_len_add;
 				if(payload_len_add+payload_len >= size_pack_recv){
 					payload_len = size_pack_recv - payload_len_add;
+					flag_head=FALSE;
 				}
-				MEMCPY(&(DataTx[payload_len_add]),&payload,payload_len);
+
+				MEMCPY(DataTx+payload_len_add,payload,payload_len);
 				payload_len_add += payload_len;
 				/*probar esta funcionalidad y ver si se copian todos menos el ultimo byte*/
 			}
