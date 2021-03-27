@@ -42,6 +42,13 @@
 #include "xintc.h"
 #include "xtmrctr_l.h"
 
+#include "xaxidma.h"
+volatile int TxDone=0;
+volatile int RxDone=0;
+volatile int Error=0;
+#define RESET_TIMEOUT_COUNTER 1000
+
+
 void
 xadapter_timer_handler(void *p)
 {
@@ -64,6 +71,153 @@ xadapter_timer_handler(void *p)
 #define MHZ (66)
 #define TIMER_TLR (25000000*((float)MHZ/100))
 
+/*****************************************************************************/
+/*
+*
+* This is the DMA TX Interrupt handler function.
+*
+* It gets the interrupt status from the hardware, acknowledges it, and if any
+* error happens, it resets the hardware. Otherwise, if a completion interrupt
+* is present, then sets the TxDone.flag
+*
+* @param	Callback is a pointer to TX channel of the DMA engine.
+*
+* @return	None.
+*
+* @note		None.
+*
+******************************************************************************/
+void TxIntrHandler(void *Callback)
+{
+
+	u32 IrqStatus;
+	int TimeOut;
+	XAxiDma *AxiDmaInst = (XAxiDma *)Callback;
+
+	/* Read pending interrupts */
+	IrqStatus = XAxiDma_IntrGetIrq(AxiDmaInst, XAXIDMA_DMA_TO_DEVICE);
+
+	/* Acknowledge pending interrupts */
+
+
+	XAxiDma_IntrAckIrq(AxiDmaInst, IrqStatus, XAXIDMA_DMA_TO_DEVICE);
+
+	/*
+	 * If no interrupt is asserted, we do not do anything
+	 */
+	if (!(IrqStatus & XAXIDMA_IRQ_ALL_MASK)) {
+
+		return;
+	}
+
+	/*
+	 * If error interrupt is asserted, raise error flag, reset the
+	 * hardware to recover from the error, and return with no further
+	 * processing.
+	 */
+	if ((IrqStatus & XAXIDMA_IRQ_ERROR_MASK)) {
+
+		Error = 1;
+
+		/*
+		 * Reset should never fail for transmit channel
+		 */
+		XAxiDma_Reset(AxiDmaInst);
+
+		TimeOut = RESET_TIMEOUT_COUNTER;
+
+		while (TimeOut) {
+			if (XAxiDma_ResetIsDone(AxiDmaInst)) {
+				break;
+			}
+
+			TimeOut -= 1;
+		}
+
+		return;
+	}
+
+	/*
+	 * If Completion interrupt is asserted, then set the TxDone flag
+	 */
+	if ((IrqStatus & XAXIDMA_IRQ_IOC_MASK)) {
+
+		TxDone = 1;
+	}
+}
+
+/*****************************************************************************/
+/*
+*
+* This is the DMA RX interrupt handler function
+*
+* It gets the interrupt status from the hardware, acknowledges it, and if any
+* error happens, it resets the hardware. Otherwise, if a completion interrupt
+* is present, then it sets the RxDone flag.
+*
+* @param	Callback is a pointer to RX channel of the DMA engine.
+*
+* @return	None.
+*
+* @note		None.
+*
+******************************************************************************/
+void RxIntrHandler(void *Callback)
+{
+	u32 IrqStatus;
+	int TimeOut;
+	XAxiDma *AxiDmaInst = (XAxiDma *)Callback;
+
+	/* Read pending interrupts */
+	IrqStatus = XAxiDma_IntrGetIrq(AxiDmaInst, XAXIDMA_DEVICE_TO_DMA);
+
+	/* Acknowledge pending interrupts */
+	XAxiDma_IntrAckIrq(AxiDmaInst, IrqStatus, XAXIDMA_DEVICE_TO_DMA);
+
+	/*
+	 * If no interrupt is asserted, we do not do anything
+	 */
+	if (!(IrqStatus & XAXIDMA_IRQ_ALL_MASK)) {
+		return;
+	}
+
+	/*
+	 * If error interrupt is asserted, raise error flag, reset the
+	 * hardware to recover from the error, and return with no further
+	 * processing.
+	 */
+	if ((IrqStatus & XAXIDMA_IRQ_ERROR_MASK)) {
+
+		Error = 1;
+
+		/* Reset could fail and hang
+		 * NEED a way to handle this or do not call it??
+		 */
+		XAxiDma_Reset(AxiDmaInst);
+
+		TimeOut = RESET_TIMEOUT_COUNTER;
+
+		while (TimeOut) {
+			if(XAxiDma_ResetIsDone(AxiDmaInst)) {
+				break;
+			}
+
+			TimeOut -= 1;
+		}
+
+		return;
+	}
+
+	/*
+	 * If completion interrupt is asserted, then set RxDone flag
+	 */
+	if ((IrqStatus & XAXIDMA_IRQ_IOC_MASK)) {
+
+		RxDone = 1;
+	}
+}
+
+
 void
 platform_setup_timer()
 {
@@ -85,6 +239,31 @@ platform_setup_timer()
 			(XInterruptHandler)xadapter_timer_handler,
 			0);
 }
+
+void platfrom_setup_dma(XAxiDma * InstancePtr){
+	XAxiDma_Config *Config;
+	//XAxiDma * InstancePtr = &
+	Config = XAxiDma_LookupConfig(XPAR_AXIDMA_0_DEVICE_ID);
+	if (!Config) {
+		xil_printf("No config found for %d\r\n", XPAR_AXIDMA_0_DEVICE_ID);
+	}
+	/* Initialize DMA engine */
+	int Status = XAxiDma_CfgInitialize(InstancePtr, Config);
+	if (Status != XST_SUCCESS) {
+		xil_printf("Initialization failed %d\r\n", Status);
+	}
+	/* Register DMA handler */
+	XIntc_RegisterHandler(XPAR_INTC_0_BASEADDR,
+			XPAR_INTC_0_AXIDMA_0_MM2S_INTROUT_VEC_ID,
+			(XInterruptHandler) TxIntrHandler,
+			InstancePtr);
+	XIntc_RegisterHandler(XPAR_INTC_0_BASEADDR,
+			XPAR_INTC_0_AXIDMA_0_S2MM_INTROUT_VEC_ID,
+				(XInterruptHandler) RxIntrHandler,
+				InstancePtr);
+}
+
+
 
 void platform_enable_interrupts()
 {

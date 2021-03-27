@@ -52,9 +52,12 @@
 /*define y variables agregadas*/
 #include "mblaze_nt_types.h"
 #include "string.h"
+#include "xaxidma.h"
 
+#define MAX_BUFFER_LEN			32768U
 #define MEN_BASE_DDR3	        XPAR_MIG_7SERIES_0_BASEADDR
-#define BUS_DATA_TX		       (MEN_BASE_DDR3 + 0x20000000)
+#define BUS_DATA_TX		       	(MEN_BASE_DDR3 + 0x20000000)
+#define BUS_DATA_RX				(MEN_BASE_DDR3 + 0x20100000)
 
 
 /* defined by each RAW mode application */
@@ -79,15 +82,24 @@ extern volatile int TcpSlowTmrFlag;
 static struct netif server_netif;
 struct netif *echo_netif;
 
+/*Variables for the application*/
 //extern struct pbuf* pbuf_recv;
-extern unsigned char* payload;
-extern u16_t payload_len;
+extern unsigned char* payload_ext;
+extern u16_t payload_len_ext;
 extern boolean flag_recv;
-volatile boolean flag_head;
+extern XAxiDma AxiDmaInstance;
+
+/*Interrupt of dma*/
+extern volatile int TxDone;
+extern volatile int RxDone;
+extern volatile int Error;
+volatile boolean flag_head=FALSE;
 volatile u16_t size_payload;
 u16_t size_pack_recv;
 u32_t* BusDataTx =(u32_t*) BUS_DATA_TX;
-static u8_t* DataTx = (u8_t*)BUS_DATA_TX;
+u32_t* BusDataRx =(u32_t*) BUS_DATA_RX;
+u8_t* DataTx = (u8_t*)BUS_DATA_TX;
+u8_t* DataRx = (u8_t*)BUS_DATA_RX;
 u16_t payload_len_add;
 
 #if LWIP_IPV6==1
@@ -124,18 +136,48 @@ print_ip_settings(ip_addr_t *ip, ip_addr_t *mask, ip_addr_t *gw)
 }
 #endif
 
-#if defined (__arm__) && !defined (ARMR5)
-#if XPAR_GIGE_PCS_PMA_SGMII_CORE_PRESENT == 1 || XPAR_GIGE_PCS_PMA_1000BASEX_CORE_PRESENT == 1
-int ProgramSi5324(void);
-int ProgramSfpPhy(void);
-#endif
-#endif
+int DMA_send_data(u8_t* BuffAddrSrc,u8_t* BuffAddrDst,u32 Length, int Direction){
+	int Status;
+	int Direcction_device_to_dma = (Direction == 1) ? 0 : 1;
+	/* Disable all interrupts before setup */
+	XAxiDma_IntrDisable(&AxiDmaInstance, XAXIDMA_IRQ_ALL_MASK,
+						XAXIDMA_DMA_TO_DEVICE);
+	XAxiDma_IntrDisable(&AxiDmaInstance, XAXIDMA_IRQ_ALL_MASK,
+			XAXIDMA_DEVICE_TO_DMA);
+	/* Enable all interrupts */
+	XAxiDma_IntrEnable(&AxiDmaInstance, XAXIDMA_IRQ_ALL_MASK,
+						XAXIDMA_DMA_TO_DEVICE);
+	XAxiDma_IntrEnable(&AxiDmaInstance, XAXIDMA_IRQ_ALL_MASK,
+						XAXIDMA_DEVICE_TO_DMA);
 
-#ifdef XPS_BOARD_ZCU102
-#ifdef XPAR_XIICPS_0_DEVICE_ID
-int IicPhyReset(void);
-#endif
-#endif
+	TxDone = 0;
+	RxDone = 0;
+	Error = 0;
+	/* Flush the buffers before the DMA transfer, in case the Data Cache
+		 * is enabled
+		 */
+	Xil_DCacheFlushRange((UINTPTR)BuffAddrSrc, Length*2);
+	Xil_DCacheFlushRange((UINTPTR)BuffAddrDst, Length*2);
+
+	Status = XAxiDma_SimpleTransfer(&AxiDmaInstance,(UINTPTR) BuffAddrDst,
+								Length, Direcction_device_to_dma);
+		if (Status != XST_SUCCESS) {
+			return XST_FAILURE;
+		}
+
+	Status = XAxiDma_SimpleTransfer(&AxiDmaInstance,(UINTPTR) BuffAddrSrc,
+							Length, Direction);
+	if (Status != XST_SUCCESS) {
+		return XST_FAILURE;
+	}
+	/*check out bytes transfers in lila!!!!*/
+	/*wait while Txdone ,Rxdone set */
+	while(!TxDone && !RxDone && !Error){
+		/*nop*/
+	}
+
+	return XST_SUCCESS;
+}
 
 int main()
 {
@@ -245,7 +287,8 @@ int main()
 	/* start the application (web server, rxtest, txtest, etc..) */
 	start_application();
 
-	memset((void *)BusDataTx, 0, 9216U);
+	memset((void *)BusDataTx, 0, MAX_BUFFER_LEN);
+	memset((void *)BusDataRx, 0, MAX_BUFFER_LEN);
 
 	/* receive and process packets */
 	while (1) {
@@ -258,18 +301,18 @@ int main()
 			TcpSlowTmrFlag = 0;
 		}
 		xemacif_input(echo_netif);
-/*TODO: Reconocimiento de trama y copiado de datos*/
-
-		/*si llego un pbuf se levanta la bandera*/
+/*TODO: Recognition of frame and copy of data*/
 		if (flag_recv){
 			flag_recv = FALSE;
+			/*variables local*/
 			unsigned char data;
-			//unsigned char *pData;
+			u16_t payload_len_present = payload_len_ext;
+			unsigned char * payload = payload_ext;
+
 			if (!flag_head){
-				//payload++;
-				//pData++;
-				data = (unsigned char) *payload;
-				if (data==0xAA){ //head
+				data = (unsigned char)*payload;
+				/*check out head*/
+				if (data==0xAA){
 					flag_head = TRUE;
 					payload_len_add=0;
 					size_pack_recv=0;
@@ -284,27 +327,59 @@ int main()
 					data= (unsigned char)*payload; //get high size pack
 					size_pack_recv |=  (data<<8);
 					payload++;
-					payload_len_add = payload_len-4;
-					MEMCPY(DataTx,payload,payload_len_add);
+					payload_len_add = payload_len_present-4;
 
+					/*if receive one pack of 1024 (pack of 1019 + star frame+ gpio + size_l + size_h+ end frame)*/
+					if(size_pack_recv==1019){
+						MEMCPY(DataTx,(u8_t*)payload,payload_len_add-1);
+						data = (unsigned char)*(payload+payload_len_add-1);//get end byte of frame
+						if(data==0x55) {
+							int Status = DMA_send_data(DataTx,DataRx,size_pack_recv,XAXIDMA_DMA_TO_DEVICE);
+							if (Status != XST_SUCCESS)
+								xil_printf("Problem in send byte by DMA\r\n");
+							flag_head=FALSE;
+						}
+					}
+					else
+						MEMCPY(DataTx,(u8_t*)payload,payload_len_add); //copy byte in DataTx
 				}
 			}
 
 			else {
 				//DataTx = DataTx + payload_len_add;
-				if(payload_len_add+payload_len >= size_pack_recv){
-					payload_len = size_pack_recv - payload_len_add;
-					flag_head=FALSE;
+				/*Si viene el ultimo paquete que contiene el final de trama ese byte
+				 * no se guarda*/
+				if(payload_len_add+payload_len_present >= size_pack_recv){
+					payload_len_present = size_pack_recv - payload_len_add;
+					/*copy end byte*/
+					MEMCPY(DataTx+payload_len_add,(u8_t*)payload,payload_len_present);
+					data= (unsigned char) *(payload+payload_len_present); //get the end of frame
+					/*send byte in buffer by dma*/
+					if(data==0x55){
+						int Status = DMA_send_data(DataTx,DataRx,size_pack_recv,XAXIDMA_DMA_TO_DEVICE);
+						if (Status != XST_SUCCESS)
+							xil_printf("Problem in send byte\r\n");
+						//xil_printf("Send bytes by dma\r\n");
+						flag_head=FALSE;
+						/*rebroadcast bytes (success)*/
+						memset((void *)DataTx, 0, size_pack_recv);
+						Status = DMA_send_data(DataRx,DataTx,size_pack_recv,XAXIDMA_DMA_TO_DEVICE);
+						if (Status != XST_SUCCESS)
+							xil_printf("Problem in rebroadcast byte\r\n");
+					}
 				}
-
-				MEMCPY(DataTx+payload_len_add,payload,payload_len);
-				payload_len_add += payload_len;
-				/*probar esta funcionalidad y ver si se copian todos menos el ultimo byte*/
+				else {
+					MEMCPY(DataTx+payload_len_add,(u8_t*)payload,payload_len_present);
+					payload_len_add += payload_len_present;
+				}
 			}
- 			size_payload += payload_len;
- 			//pbuf_recv = 0;
+ 			size_payload += payload_len_ext;
  			xil_printf("received packet:%d\r\n",size_payload);
-		};
+		}
+		/*
+		 * para recibir por dma tiene que ser el mismo payload
+		 *
+		 * */
 	}
 
 	/* never reached */
@@ -313,4 +388,4 @@ int main()
 	return 0;
 }
 
-/*Ver la forma de extraer la cabecera con los datos de interes en el echo.c y despues copiar en el main*/
+

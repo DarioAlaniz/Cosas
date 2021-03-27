@@ -25,7 +25,7 @@
  * OF SUCH DAMAGE.
  *
  */
-
+#include "xaxidma.h"
 #ifndef __PLATFORM_H_
 #define __PLATFORM_H_
 
@@ -44,5 +44,6 @@ void timer_callback();
 #endif
 void platform_setup_timer();
 void platform_enable_interrupts();
+void platfrom_setup_dma(XAxiDma * Instance);
 #endif
 

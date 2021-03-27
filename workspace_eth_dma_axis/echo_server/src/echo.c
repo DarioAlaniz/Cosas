@@ -38,8 +38,8 @@
 #include "mblaze_nt_types.h"
 
 //struct pbuf* pbuf_recv;
-unsigned char* payload;
-volatile u16_t payload_len;
+unsigned char* payload_ext;
+volatile u16_t payload_len_ext;
 volatile boolean flag_recv = FALSE;
 
 
@@ -71,11 +71,13 @@ err_t recv_callback(void *arg, struct tcp_pcb *tpcb,
 
 	/* indicate that the packet has been received */
 	tcp_recved(tpcb, p->len);
-	err = tcp_write(tpcb, "received packet\n\r",sizeof("received packet\n\r"), 1);
-	if(!flag_recv)
+	//err = tcp_write(tpcb, "received packet\n\r",sizeof("received packet\n\r"), 1);
+	/*if get a pbuf raise the flag  high*/
+	if(!flag_recv){
 		flag_recv = TRUE;
-	payload = (unsigned char*) p->payload;
-	payload_len = p->len;
+	}
+	payload_ext = (unsigned char*) p->payload;
+	payload_len_ext = p->len;
 	//pbuf_copy_partial() //copia el payload en un buffer asignado
 	//pbuf_recv = pbuf_clone(PBUF_RAW, PBUF_POOL, p);
 	/* free the received pbuf */
