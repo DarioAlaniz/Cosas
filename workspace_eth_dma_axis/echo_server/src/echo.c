@@ -41,10 +41,23 @@
 unsigned char* payload_ext;
 volatile u16_t payload_len_ext;
 volatile boolean flag_recv = FALSE;
+struct tcp_pcb *tpcb_extern;
+u16_t next_data_to_send_ptr;
+char cabecera = 0xAA;
+
+extern volatile s16_t size_pack_recv;
+
+extern u8_t* DataRx;
+
 
 
 int transfer_data() {
-	return flag_recv;
+	int Status = tcp_write(tpcb_extern,(void *) &cabecera, sizeof(char), 1);
+	if (Status != ERR_OK)
+		xil_printf("Problem in send byte by tcp\r\n");
+	tcp_output(tpcb_extern);
+	next_data_to_send_ptr = 0;
+	return 0;
 }
 
 void print_app_header()
@@ -55,6 +68,29 @@ void print_app_header()
 	xil_printf("\n\r\n\r-----lwIPv6 TCP echo server ------\n\r");
 #endif
 	xil_printf("TCP packets sent to port 6001 will be echoed back\n\r");
+}
+
+
+s8_t sent_callback(void *arg, struct tcp_pcb *tpcb,u16_t len){
+
+	u16_t size_free = tcp_sndbuf(tpcb_extern);
+	if(size_pack_recv>0){
+
+		/* make sure the write length is a multiple of 32bits */
+		u16_t write_length = (size_pack_recv>size_free) ? size_free : size_pack_recv;
+
+
+		 /*next data*/
+		int Status = tcp_write(tpcb, (void *)(DataRx+next_data_to_send_ptr), write_length, 0);
+		if (Status != ERR_OK)
+				xil_printf("Problem in send byte by tcp\r\n");
+		tcp_output(tpcb_extern);
+
+
+		next_data_to_send_ptr +=write_length;
+		size_pack_recv = size_pack_recv - write_length;
+	}
+	return ERR_OK;
 }
 
 
@@ -76,6 +112,7 @@ err_t recv_callback(void *arg, struct tcp_pcb *tpcb,
 	if(!flag_recv){
 		flag_recv = TRUE;
 	}
+	tpcb_extern = tpcb;
 	payload_ext = (unsigned char*) p->payload;
 	payload_len_ext = p->len;
 	//pbuf_copy_partial() //copia el payload en un buffer asignado
@@ -96,6 +133,10 @@ err_t accept_callback(void *arg, struct tcp_pcb *newpcb, err_t err)
 	/* just use an integer number indicating the connection id as the
 	   callback argument */
 	tcp_arg(newpcb, (void*)(UINTPTR)connection);
+
+	/* specify callback to use for when some data has been successfully sent */
+	tcp_sent(newpcb, sent_callback);
+
 
 	/* increment for subsequent accepted connections */
 	connection++;

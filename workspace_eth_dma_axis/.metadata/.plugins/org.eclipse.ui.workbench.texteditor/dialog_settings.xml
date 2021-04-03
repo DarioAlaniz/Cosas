@@ -2,12 +2,18 @@
 <section name="Workbench">
 	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
 		<item value="false" key="isRegEx"/>
-		<item value="Xil_DCacheFlushRange" key="selection"/>
+		<item value="sent" key="selection"/>
 		<item value="false" key="casesensitive"/>
 		<item value="false" key="incremental"/>
 		<item value="true" key="wrap"/>
 		<item value="false" key="wholeword"/>
 		<list key="findhistory">
+			<item value="sent"/>
+			<item value="tcp_send"/>
+			<item value="send"/>
+			<item value="BUFFEr"/>
+			<item value="TCP_SEN"/>
+			<item value="TCP_SE"/>
 			<item value="Xil_DCacheFlushRange"/>
 			<item value="Length mismatch"/>
 			<item value="Length mis"/>

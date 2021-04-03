@@ -93,7 +93,10 @@ extern XAxiDma AxiDmaInstance;
 extern volatile int TxDone;
 extern volatile int RxDone;
 extern volatile int Error;
+extern struct tcp_pcb *tpcb_extern;
+
 volatile boolean flag_head=FALSE;
+volatile boolean flag_test=TRUE;
 volatile u16_t size_payload;
 u16_t size_pack_recv;
 u32_t* BusDataTx =(u32_t*) BUS_DATA_TX;
@@ -101,6 +104,7 @@ u32_t* BusDataRx =(u32_t*) BUS_DATA_RX;
 u8_t* DataTx = (u8_t*)BUS_DATA_TX;
 u8_t* DataRx = (u8_t*)BUS_DATA_RX;
 u16_t payload_len_add;
+u8_t status=1;
 
 #if LWIP_IPV6==1
 void print_ip6(char *msg, ip_addr_t *ip)
@@ -165,11 +169,13 @@ int DMA_send_data(u8_t* BuffAddrSrc,u8_t* BuffAddrDst,u32 Length, int Direction)
 			return XST_FAILURE;
 		}
 
+
 	Status = XAxiDma_SimpleTransfer(&AxiDmaInstance,(UINTPTR) BuffAddrSrc,
 							Length, Direction);
 	if (Status != XST_SUCCESS) {
 		return XST_FAILURE;
 	}
+
 	/*check out bytes transfers in lila!!!!*/
 	/*wait while Txdone ,Rxdone set */
 	while(!TxDone && !RxDone && !Error){
@@ -301,9 +307,15 @@ int main()
 			TcpSlowTmrFlag = 0;
 		}
 		xemacif_input(echo_netif);
+
+		if(!flag_test && status){
+			 status = transfer_data();
+		}
 /*TODO: Recognition of frame and copy of data*/
 		if (flag_recv){
 			flag_recv = FALSE;
+			flag_test = TRUE;
+			status=1;
 			/*variables local*/
 			unsigned char data;
 			u16_t payload_len_present = payload_len_ext;
@@ -359,13 +371,8 @@ int main()
 						int Status = DMA_send_data(DataTx,DataRx,size_pack_recv,XAXIDMA_DMA_TO_DEVICE);
 						if (Status != XST_SUCCESS)
 							xil_printf("Problem in send byte\r\n");
-						//xil_printf("Send bytes by dma\r\n");
 						flag_head=FALSE;
-						/*rebroadcast bytes (success)*/
-						memset((void *)DataTx, 0, size_pack_recv);
-						Status = DMA_send_data(DataRx,DataTx,size_pack_recv,XAXIDMA_DMA_TO_DEVICE);
-						if (Status != XST_SUCCESS)
-							xil_printf("Problem in rebroadcast byte\r\n");
+						flag_test=FALSE;
 					}
 				}
 				else {
@@ -376,12 +383,8 @@ int main()
  			size_payload += payload_len_ext;
  			xil_printf("received packet:%d\r\n",size_payload);
 		}
-		/*
-		 * para recibir por dma tiene que ser el mismo payload
-		 *
-		 * */
-	}
 
+	}
 	/* never reached */
 	cleanup_platform();
 
